@@ -34,7 +34,7 @@ if channel_secret is None:
     print('Specify LINE_CHANNEL_SECRET as environment variable.')
     sys.exit(1)
 if channel_access_token is None:
-    print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    print('Specify LINE_CHANNEL_ACCESS_TOKEN as環境變數.')
     sys.exit(1)
 
 configuration = Configuration(access_token=channel_access_token)
@@ -88,6 +88,9 @@ async def handle_callback(request: Request):
             user_chat_path = f'chat/{user_id}'
         chatgpt = fdb.get(user_chat_path, None)
 
+        user_score_path = f'scores/{user_id}'
+        user_score = fdb.get(user_score_path, None) or 0
+
         if text == "出題":
             scam_example, correct_example = generate_examples()
             messages = [{'role': 'bot', 'parts': [scam_example, correct_example]}]
@@ -97,10 +100,12 @@ async def handle_callback(request: Request):
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message, correct_message = chatgpt[-1]['parts']
                 if (text == "是" and scam_message) or (text == "否" and not scam_message):
-                    reply_msg = "你好棒！"
+                    user_score += 5
+                    fdb.put_async(user_score_path, None, user_score)
+                    reply_msg = f"你好棒！你的當前分數是：{user_score}分"
                 else:
                     advice = analyze_response(scam_message)
-                    reply_msg = f"這是詐騙訊息。詐騙訊息分析:\n\n{advice}"
+                    reply_msg = f"這是詐騙訊息。詐騙訊息分析:\n\n{advice}\n\n你的當前分數是：{user_score}分"
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
         else:

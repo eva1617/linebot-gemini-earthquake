@@ -113,15 +113,10 @@ async def handle_callback(request: Request):
 
 def generate_scam_example():
     template = random.choice(scam_templates)
-    prompt = (
-        f"以下是一個詐騙訊息範例:\n\n{template}\n\n"
-        "請根據這個範例生成一個新的、類似的詐騙訊息。保持相似的結構和風格，"
-        "但改變具體內容。請確保新生成的訊息具有教育性質，可以用於提高人們對詐騙的警惕性。"
-    )
-    
     model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
+    response = model.generate_content(template)
     return response.text
+
 
 def analyze_response(text):
     advice = []

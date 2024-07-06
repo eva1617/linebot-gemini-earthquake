@@ -80,7 +80,7 @@ async def handle_callback(request: Request):
         if text == "出題":
             model = genai.GenerativeModel('gemini-1.5-pro')
             response = model.generate_content(
-                f'假設你是一個詐騙者，寫一段騙人的訊息。')
+                '請提供一個關於如何防範詐騙的知識問題。')
             messages = [{'role': 'bot', 'parts': [response.text]}]
             fdb.put_async(user_chat_path, None, messages)
             reply_msg = response.text

@@ -89,19 +89,22 @@ async def handle_callback(request: Request):
         chatgpt = fdb.get(user_chat_path, None)
 
         if text == "出題":
-            scam_example = generate_scam_example()
-            messages = [{'role': 'bot', 'parts': [scam_example]}]
+            scam_example, correct_example = generate_examples()
+            messages = [{'role': 'bot', 'parts': [scam_example, correct_example]}]
             fdb.put_async(user_chat_path, None, messages)
-            reply_msg = scam_example
-        elif text == "解析":
+            reply_msg = f"詐騙訊息:\n\n{scam_example}\n\n請判斷這是否為詐騙訊息（請回覆'是'或'否'）"
+        elif text in ["是", "否"]:
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
-                scam_message = chatgpt[-1]['parts'][0]
-                advice = analyze_response(scam_message)
-                reply_msg = f'詐騙訊息分析:\n\n{advice}'
+                scam_message, correct_message = chatgpt[-1]['parts']
+                if (text == "是" and scam_message) or (text == "否" and not scam_message):
+                    reply_msg = "你好棒！"
+                else:
+                    advice = analyze_response(scam_message)
+                    reply_msg = f"這是詐騙訊息。詐騙訊息分析:\n\n{advice}"
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
         else:
-            reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「解析」來分析上一個生成的範例。'
+            reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「是」或「否」來判斷上一個生成的範例。'
 
         await line_bot_api.reply_message(
             ReplyMessageRequest(
@@ -111,18 +114,22 @@ async def handle_callback(request: Request):
 
     return 'OK'
 
-def generate_scam_example():
-    template = random.choice(scam_templates)
-    prompt = (
-        f"以下是一個詐騙訊息範例:\n\n{template}\n\n"
+def generate_examples():
+    scam_template = random.choice(scam_templates)
+    prompt_scam = (
+        f"以下是一個詐騙訊息範例:\n\n{scam_template}\n\n"
         "請根據這個範例生成一個新的、類似的詐騙訊息。保持相似的結構和風格，"
         "但改變具體內容。請確保新生成的訊息具有教育性質，可以用於提高人們對詐騙的警惕性。"
         "只需要生成詐騙訊息本身，不要添加任何額外的說明或指示。"
     )
-    
+    prompt_correct = (
+        f"請生成一個真實且正確的訊息範例，其風格和結構類似於以下的詐騙訊息範例，但內容是真實且正確的:\n\n{scam_template}"
+    )
+
     model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
-    return response.text.strip()
+    scam_response = model.generate_content(prompt_scam)
+    correct_response = model.generate_content(prompt_correct)
+    return scam_response.text.strip(), correct_response.text.strip()
 
 def analyze_response(text):
     prompt = (
@@ -132,7 +139,8 @@ def analyze_response(text):
         "2. 為什麼這些元素是可疑的\n"
         "3. 如何識別類似的詐騙訊息\n"
         "4. 面對這種訊息時應該採取什麼行動\n"
-        "請以教育性和提醒性的語氣回答，幫助人們提高警惕。不要使用粗體或任何特殊格式，只需使用純文本。不要使用破折號，而是使用數字列表。"
+        "請以教育性和提醒性的語氣回答，幫助人們提高警惕。"
+        "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
     )
     
     model = genai.GenerativeModel('gemini-pro')

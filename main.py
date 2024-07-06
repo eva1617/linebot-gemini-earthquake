@@ -101,11 +101,15 @@ async def handle_callback(request: Request):
         else:
             user_chat_path = f'chat/{user_id}'
         chatgpt = fdb.get(user_chat_path, None)
+        logging.info(f'ChatGPT data: {chatgpt}')
 
         if text == "出題":
             scam_template = random.choice(scam_templates)
+            logging.info(f'Selected scam template: {scam_template}')
             fake_url = random.choice(fake_urls) if fake_urls else "http://example.com"
+            logging.info(f'Selected fake URL: {fake_url}')
             scam_example = scam_template.format(url=fake_url)
+            logging.info(f'Generated scam example: {scam_example}')
             messages = [{'role': 'bot', 'parts': [scam_example]}]
             fdb.put_async(user_chat_path, None, messages)
             reply_msg = scam_example

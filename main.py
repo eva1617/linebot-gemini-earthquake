@@ -113,15 +113,30 @@ async def handle_callback(request: Request):
 
 def analyze_response(text):
     advice = []
+    # Check for suspicious URLs
     if re.search(r'\bwww\.[a-zA-Z0-9-]+\.[a-z]{2,}\b', text):
         advice.append("這條訊息包含可疑的網址，請勿點擊。")
-    if re.search(r'\b(逾期|凍結|註銷|終止供水|停止收費|登入|認證|綁定用戶資料)\b', text):
+    
+    # Check for urgency or threat language
+    if re.search(r'\b(逾期|凍結|註銷|終止供水|停止收費|登入|認證|綁定用戶資料|立即|緊急)\b', text):
         advice.append("訊息中包含緊急措辭，這是常見的詐騙手段。")
-    if re.search(r'\b(點擊此處|請立即|詳情繳費)\b', text):
+    
+    # Check for inducement phrases
+    if re.search(r'\b(點擊此處|請立即|詳情繳費|免費|下載|活動|投票)\b', text):
         advice.append("訊息中包含誘導性語句，這可能是詐騙。")
-    if "@" in text:
-        advice.append("訊息中包含電子郵件地址，這可能是詐騙手段之一。")
+    
+    # Check for unsolicited requests
+    if re.search(r'\b(幫忙|要求|收個認證|麻煩幫忙|確認是本人幫忙認證|幫忙認證)\b', text):
+        advice.append("訊息中包含不明請求，這可能是詐騙手段之一。")
+    
+    # Check for uncommon domain extensions
+    if re.search(r'\.(icu|info|bit|pgp|shop)\b', text):
+        advice.append("訊息中包含不常見的域名擴展，請小心。")
 
+    # Check for signs of phishing (e.g., login, account details)
+    if re.search(r'\b(登入|用戶資料|帳戶|賬戶|安全認證)\b', text):
+        advice.append("訊息中要求提供帳戶或個人資料，這可能是網絡釣魚詐騙。")
+    
     if not advice:
         advice.append("這條訊息看起來很可疑，請小心處理。")
 

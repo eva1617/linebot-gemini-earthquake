@@ -97,7 +97,7 @@ async def handle_callback(request: Request):
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message = chatgpt[-1]['parts'][0]
                 advice = analyze_response(scam_message)
-                reply_msg = f'你的回覆是: {text}\n\n辨別建議:\n{advice}'
+                reply_msg = f'上次的詐騙訊息是: {scam_message}\n\n辨別建議:\n{advice}'
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先出題。'
         else:

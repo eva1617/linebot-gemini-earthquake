@@ -112,11 +112,17 @@ async def handle_callback(request: Request):
     return 'OK'
 
 def generate_scam_example():
-    template = random.choice(scam_templates)
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(template)
-    return response.text
-
+    try:
+        template = random.choice(scam_templates)
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(template)
+        if response and response.text:
+            return response.text
+        else:
+            return "無法生成有效的詐騙訊息範例。"
+    except Exception as e:
+        logger.error(f"生成詐騙訊息範例時出現錯誤: {e}")
+        return "生成詐騙訊息範例時發生了一些問題。請稍後再試。"
 
 def analyze_response(text):
     advice = []

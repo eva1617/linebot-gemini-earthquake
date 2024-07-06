@@ -112,9 +112,20 @@ async def handle_callback(request: Request):
     return 'OK'
 
 def analyze_response(text):
-    # 這裡是您的分析邏輯，根據詐騙訊息給出辨別建議
-    advice = "這是一條詐騙訊息，你可以注意到其中的誇張語氣和不合理的要求。"
-    return advice
+    advice = []
+    if re.search(r'\bwww\.[a-zA-Z0-9-]+\.[a-z]{2,}\b', text):
+        advice.append("這條訊息包含可疑的網址，請勿點擊。")
+    if re.search(r'\b(逾期|凍結|註銷|終止供水|停止收費|登入|認證|綁定用戶資料)\b', text):
+        advice.append("訊息中包含緊急措辭，這是常見的詐騙手段。")
+    if re.search(r'\b(點擊此處|請立即|詳情繳費)\b', text):
+        advice.append("訊息中包含誘導性語句，這可能是詐騙。")
+    if "@" in text:
+        advice.append("訊息中包含電子郵件地址，這可能是詐騙手段之一。")
+
+    if not advice:
+        advice.append("這條訊息看起來很可疑，請小心處理。")
+
+    return "\n".join(advice)
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', default=8080))

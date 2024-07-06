@@ -89,19 +89,19 @@ async def handle_callback(request: Request):
         chatgpt = fdb.get(user_chat_path, None)
 
         if text == "出題":
-            scam_example = random.choice(scam_templates)
+            scam_example = generate_scam_example()
             messages = [{'role': 'bot', 'parts': [scam_example]}]
             fdb.put_async(user_chat_path, None, messages)
-            reply_msg = scam_example
+            reply_msg = f"這是一個生成的詐騙訊息範例（僅供教育目的）:\n\n{scam_example}\n\n請輸入「解析」來獲取詳細分析。"
         elif text == "解析":
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message = chatgpt[-1]['parts'][0]
                 advice = analyze_response(scam_message)
                 reply_msg = f'上次的詐騙訊息是: {scam_message}\n\n辨別建議:\n{advice}'
             else:
-                reply_msg = '目前沒有可供解析的訊息，請先出題。'
+                reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
         else:
-            reply_msg = '未能識別的指令，請輸入 "出題" 或 "解析"。'
+            reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「解析」來分析上一個生成的範例。'
 
         await line_bot_api.reply_message(
             ReplyMessageRequest(
@@ -110,6 +110,18 @@ async def handle_callback(request: Request):
             ))
 
     return 'OK'
+
+def generate_scam_example():
+    template = random.choice(scam_templates)
+    prompt = (
+        f"以下是一個詐騙訊息範例:\n\n{template}\n\n"
+        "請根據這個範例生成一個新的、類似的詐騙訊息。保持相似的結構和風格，"
+        "但改變具體內容。請確保新生成的訊息具有教育性質，可以用於提高人們對詐騙的警惕性。"
+    )
+    
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(prompt)
+    return response.text
 
 def analyze_response(text):
     advice = []

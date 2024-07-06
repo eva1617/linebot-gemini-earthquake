@@ -3,24 +3,14 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime
 from dotenv import load_dotenv
-from linebot.v3.webhook import WebhookParser
-from linebot.v3.messaging import (
-    AsyncApiClient,
-    AsyncMessagingApi,
-    Configuration,
-    ReplyMessageRequest,
-    TextMessage
-)
-from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
-
+from linebot import WebhookParser, LineBotApi
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import uvicorn
-import requests
-import google.generativeai as genai
-from firebase import firebase
 import random
+from firebase import firebase
+import google.generativeai as genai
 
 logging.basicConfig(level=os.getenv('LOG', 'WARNING'))
 logger = logging.getLogger(__file__)
@@ -28,23 +18,14 @@ logger = logging.getLogger(__file__)
 app = FastAPI()
 
 load_dotenv()
-channel_secret = os.getenv('LINE_CHANNEL_SECRET', None)
-channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', None)
-if channel_secret is None:
-    print('Specify LINE_CHANNEL_SECRET as environment variable.')
-    sys.exit(1)
-if channel_access_token is None:
-    print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
-    sys.exit(1)
-
-configuration = Configuration(access_token=channel_access_token)
-async_api_client = AsyncApiClient(configuration)
-line_bot_api = AsyncMessagingApi(async_api_client)
-parser = WebhookParser(channel_secret)
-
+channel_secret = os.getenv('LINE_CHANNEL_SECRET')
+channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 firebase_url = os.getenv('FIREBASE_URL')
 gemini_key = os.getenv('GEMINI_API_KEY')
-genai.configure(api_key=gemini_key)
+
+line_bot_api = LineBotApi(channel_access_token)
+parser = WebhookParser(channel_secret)
+firebase_app = firebase.FirebaseApplication(firebase_url, None)
 
 scam_templates = [
     "【國泰世華】您的銀行賬戶顯示異常，請立即登入綁定用戶資料，否則賬戶將凍結使用 www.cathay-bk.com",
@@ -73,41 +54,40 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        logging.info(event)
-        if not isinstance(event, MessageEvent):
+        if not isinstance(event, MessageEvent) or not isinstance(event.message, TextMessage):
             continue
-        if not isinstance(event.message, TextMessageContent):
-            continue
+        
         text = event.message.text.strip()
         user_id = event.source.user_id
 
-        fdb = firebase.FirebaseApplication(firebase_url, None)
         if event.source.type == 'group':
             user_chat_path = f'chat/{event.source.group_id}'
         else:
             user_chat_path = f'chat/{user_id}'
-        chatgpt = fdb.get(user_chat_path, None)
+
+        chatgpt = firebase_app.get(user_chat_path, None)
 
         if text == "出題":
             scam_example = generate_scam_example()
             messages = [{'role': 'bot', 'parts': [scam_example]}]
-            fdb.put_async(user_chat_path, None, messages)
+            firebase_app.put_async(user_chat_path, None, messages)
             reply_msg = scam_example
         elif text == "解析":
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message = chatgpt[-1]['parts'][0]
                 advice = analyze_response(scam_message)
                 reply_msg = f'詐騙訊息分析:\n\n{advice}'
+                # Add points to the user
+                add_points(user_id, 5)
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
         else:
             reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「解析」來分析上一個生成的範例。'
 
-        await line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_msg)]
-            ))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=reply_msg)
+        )
 
     return 'OK'
 
@@ -126,22 +106,26 @@ def generate_scam_example():
 
 def analyze_response(text):
     prompt = (
-        f"以下是一個潛在的詐騙訊息:\n\n{text}\n\n"
+        f"以下是一條潛在的詐騙訊息:\n\n{text}\n\n"
         "請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
         "1. 這條訊息中的可疑元素\n"
         "2. 為什麼這些元素是可疑的\n"
         "3. 如何識別類似的詐騙訊息\n"
         "4. 面對這種訊息時應該採取什麼行動\n"
-        "請以教育性和提醒性的語氣回答，幫助人們提高警惕。不要使用粗體或任何特殊格式，只需使用純文本。不要使用破折號，而是使用數字列表。"
+        "請以教育性和提醒性的語氣回答，幫助人們提高警惕。不要使用粗體或任何特殊格式，只需使用純文本。"
     )
     
     model = genai.GenerativeModel('gemini-pro')
     response = model.generate_content(prompt)
     return response.text.strip()
 
+def add_points(user_id, points):
+    # Implement your logic to add points to the user identified by user_id
+    # This could involve updating a database or some other persistent storage
+    pass
+
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', default=8080))
-    debug = True if os.environ.get(
-        'API_ENV', default='develop') == 'develop' else False
-    logging.info('Application will start...')
+    port = int(os.environ.get('PORT', 8080))
+    debug = os.environ.get('API_ENV', 'develop') == 'develop'
+    logging.info('Starting the application...')
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=debug)

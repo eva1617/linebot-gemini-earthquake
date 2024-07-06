@@ -47,14 +47,28 @@ gemini_key = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=gemini_key)
 
 scam_templates = [
-    "【國泰世華】您的銀行賬戶顯示異常，請立即登入綁定用戶資料，否則賬戶將凍結使用 www.cathay-bk.com",
-    "我朋友參加攝影比賽麻煩幫忙投票 http://www.yahoonikk.info/page/vote.pgp?pid=51",
+    "【國泰世華】您的銀行賬戶顯示異常，請立即登入綁定用戶資料，否則賬戶將凍結使用 {url}",
+    "我朋友參加攝影比賽麻煩幫忙投票 {url}",
     "登入FB就投票成功了我手機當機 line用不了 想請你幫忙安全認證 幫我收個認證簡訊 謝謝 你LINE的登陸認證密碼記得嗎 認證要用到 確認是本人幫忙認證",
-    "您的LINE已違規使用，將在24小時內註銷，請使用谷歌瀏覽器登入電腦網站並掃碼驗證解除違規 www.line-wbe.icu",
-    "【台灣自來水公司】貴戶本期水費已逾期，總計新台幣395元整，務請於6月16日前處理繳費，詳情繳費：https://bit.ly/4cnMNtE 若再超過上述日期，將終止供水",
-    "萬聖節快樂🎃 活動免費貼圖無限量下載 https://lineeshop.com",
-    "【台灣電力股份有限公司】貴戶本期電費已逾期，總計新台幣1058元整，務請於6月14日前處理繳費，詳情繳費：(網址)，若再超過上述日期，將停止收費"
+    "您的LINE已違規使用，將在24小時內註銷，請使用谷歌瀏覽器登入電腦網站並掃碼驗證解除違規 {url}",
+    "【台灣自來水公司】貴戶本期水費已逾期，總計新台幣395元整，務請於6月16日前處理繳費，詳情繳費：{url} 若再超過上述日期，將終止供水",
+    "萬聖節快樂🎃 活動免費貼圖無限量下載 {url}",
+    "【台灣電力股份有限公司】貴戶本期電費已逾期，總計新台幣1058元整，務請於6月14日前處理繳費，詳情繳費：{url}，若再超過上述日期，將停止收費"
 ]
+
+fake_url_source = "https://www-api.moda.gov.tw/OpenData/Files/12998"
+
+def get_fake_urls():
+    try:
+        response = requests.get(fake_url_source)
+        response.raise_for_status()
+        urls = response.text.split('\n')
+        return [url.strip() for url in urls if url.strip()]
+    except requests.RequestException as e:
+        logger.error(f"Error fetching fake URLs: {e}")
+        return []
+
+fake_urls = get_fake_urls()
 
 @app.get("/health")
 async def health():
@@ -89,7 +103,9 @@ async def handle_callback(request: Request):
         chatgpt = fdb.get(user_chat_path, None)
 
         if text == "出題":
-            scam_example = random.choice(scam_templates)
+            scam_template = random.choice(scam_templates)
+            fake_url = random.choice(fake_urls) if fake_urls else "http://example.com"
+            scam_example = scam_template.format(url=fake_url)
             messages = [{'role': 'bot', 'parts': [scam_example]}]
             fdb.put_async(user_chat_path, None, messages)
             reply_msg = scam_example

@@ -88,6 +88,11 @@ async def handle_callback(request: Request):
         elif event.message.text in ['是', '否']:
             chatgpt = fdb.get(f'chat/{user_id}', None)
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
+                if fdb.get(f'answers/{user_id}', None) is not None:
+                    reply_msg = '您已回答過，請勿重複作答。'
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+                    continue
+
                 scam_message, correct_message = chatgpt[-1]['parts']
                 is_scam = scam_message is not None
                 user_response = event.message.text == '是'
@@ -101,11 +106,27 @@ async def handle_callback(request: Request):
                     if user_score < 50:
                         user_score = 0
                     fdb.put_async(user_score_path, None, user_score)
-                    advice = analyze_response(scam_message if is_scam else correct_message, is_scam, user_response)
-                    reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+                    if is_scam:
+                        reply_msg = f"這是詐騙訊息。請點選解析了解更多。"
+                    else:
+                        advice = analyze_response(correct_message, is_scam, user_response)
+                        reply_msg = f"這是正確訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+
+                fdb.put_async(f'answers/{user_id}', None, user_response)
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+        elif event.message.text == "解析":
+            chatgpt = fdb.get(f'chat/{user_id}', None)
+            if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
+                scam_message, correct_message = chatgpt[-1]['parts']
+                is_scam = scam_message is not None
+                advice = analyze_response(scam_message if is_scam else correct_message, is_scam, True)
+                reply_msg = f"分析如下:\n\n{advice}"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+            else:
+                reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         elif event.message.text == "排行榜":
             reply_msg = get_rank(user_id, firebase_url)
@@ -137,21 +158,33 @@ def analyze_response(text, is_scam, user_response):
     if user_response == is_scam:
         if is_scam:
             prompt = (
-                f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "請解釋這條訊息是如何詐騙的，並提供相應的應對策略。"
+                f"以下是一個詐騙訊息範例:\n\n{text}\n\n"
+                "請分析這個訊息，並解釋為什麼它是一個詐騙訊息。"
+                "指出詐騙的特徵和可能的陷阱，以及如何識別這類詐騙。"
             )
         else:
             prompt = (
-                f"以下是一條真實且正確的訊息:\n\n{text}\n\n"
-                "請分析這條訊息，並提供詳細的解釋，說明這條訊息是真實且正確的，"
-                "包括內容的合理性、可信度來源等。"
+                f"以下是一個真實且正確的訊息範例:\n\n{text}\n\n"
+                "請分析這個訊息，並解釋為什麼它是真實且正確的。"
+                "指出這類訊息的可信特徵，以及如何與詐騙訊息區分。"
+            )
+    else:
+        if is_scam:
+            prompt = (
+                f"以下是一個詐騙訊息範例:\n\n{text}\n\n"
+                "請分析這個訊息，並解釋為什麼它是一個詐騙訊息。"
+                "指出詐騙的特徵和可能的陷阱，以及如何識別這類詐騙。"
+            )
+        else:
+            prompt = (
+                f"以下是一個真實且正確的訊息範例:\n\n{text}\n\n"
+                "請分析這個訊息，並解釋為什麼它是真實且正確的。"
+                "指出這類訊息的可信特徵，以及如何與詐騙訊息區分。"
             )
 
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    else:
-        return "無法分析，請提供正確的回答"
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(prompt)
+    return response.text.strip()
 
 def get_sorted_scores(firebase_url, path):
     fdb = firebase.FirebaseApplication(firebase_url, None)
@@ -184,7 +217,7 @@ def get_rank(current_user_id, firebase_url):
         i = 1
         for user, score in sorted_scores:
             if user == current_user_id:
-                user_display = f'*{user[:user_width]}*'
+                user_display = f'Ｍe'
             else:
                 user_display = user[:5]
 

@@ -101,16 +101,31 @@ async def handle_callback(request: Request):
                     if user_score < 50:
                         user_score = 0
                     fdb.put_async(user_score_path, None, user_score)
-                    advice = analyze_response(scam_message if is_scam else correct_message, is_scam, user_response)
-                    reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+                    if is_scam:
+                        reply_msg = f"這是詐騙訊息。請點選解析了解更多。"
+                    else:
+                        advice = analyze_response(correct_message, is_scam, user_response)
+                        reply_msg = f"這是正確訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+        elif event.message.text == "解析":
+            chatgpt = fdb.get(f'chat/{user_id}', None)
+            if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
+                scam_message, correct_message = chatgpt[-1]['parts']
+                is_scam = scam_message is not None
+                advice = analyze_response(scam_message if is_scam else correct_message, is_scam, True)
+                reply_msg = f"分析如下:\n\n{advice}"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+           
         elif event.message.text == "排行榜":
             reply_msg = get_rank(user_id, firebase_url)
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
-      
+        else:
+            reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+
     return 'OK'
 
 def generate_examples():
@@ -132,56 +147,23 @@ def generate_examples():
 
 def analyze_response(text, is_scam, user_response):
     if user_response == is_scam:
-        # 如果用户回答正确
         if is_scam:
             prompt = (
                 f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
-                "1. 這條訊息中的可疑元素\n"
-                "2. 為什麼這些元素是可疑的\n"
-                "3. 如何識別類似的詐騙訊息\n"
-                "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高警惕。"
-                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
+                "請解釋這條訊息是如何詐騙的，並提供相應的應對策略。"
             )
         else:
             prompt = (
-                f"以下是一個真實且正確的訊息:\n\n{text}\n\n"
-                "請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
-                "1. 這條訊息中的真實元素\n"
-                "2. 為什麼這些元素是真實的\n"
-                "3. 如何識別類似的真實訊息\n"
-                "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
-                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
+                f"以下是一條真實且正確的訊息:\n\n{text}\n\n"
+                "請分析這條訊息，並提供詳細的解釋，說明這條訊息是真實且正確的，"
+                "包括內容的合理性、可信度來源等。"
             )
+
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(prompt)
+        return response.text.strip()
     else:
-        # 如果用户回答错误
-        if is_scam:
-            prompt = (
-                f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "用教育性和提醒性的語氣，指出這是詐騙訊息。請提供詳細的辨別建議。包括以下幾點：\n"
-                "1. 這條訊息中的可疑元素\n"
-                "2. 為什麼這些元素是可疑的\n"
-                "3. 如何識別類似的詐騙訊息\n"
-                "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高警惕。"
-                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
-            )
-        else:
-            prompt = (
-                f"以下是一個真實且正確的訊息:\n\n{text}\n\n"
-                "用教育性和提醒性的語氣，指出這是真實且正確的訊息。請提供詳細的辨別建議。包括以下幾點：\n"
-                "1. 這條訊息中的真實元素\n"
-                "2. 為什麼這些元素是真實的\n"
-                "3. 如何識別類似的真實訊息\n"
-                "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
-                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
-            )
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
-    return response.text.strip()
+        return "無法分析，請提供正確的回答"
 
 def get_sorted_scores(firebase_url, path):
     fdb = firebase.FirebaseApplication(firebase_url, None)
@@ -193,23 +175,19 @@ def get_sorted_scores(firebase_url, path):
         return sorted_score_list
     else:
         return []
-        
-def get_rank(current_user_id,firebase_url):
 
-    # 設定表格的欄位寬度
-    rank_width = 8
-    user_width = 15
-    score_width = 12
-    total_width = rank_width + user_width + score_width + 4  # 包括分隔符號
+def get_rank(current_user_id, firebase_url):
+    rank_width = 7
+    user_width = 14
+    score_width = 11
+    total_width = rank_width + user_width + score_width + 4
 
-    sorted_scores = get_sorted_scores(firebase_url,'scores/')
+    sorted_scores = get_sorted_scores(firebase_url, 'scores/')
 
-    # 初始化表格字串
     table_str = ''
 
-    # 表格頂部邊界
     table_str += '+' + '-' * total_width + '+\n'
-    table_str += '|' + "排行榜".center(total_width) + '|\n'
+    table_str += '|' + "排行榜".center(total_width - 3) + '|\n'
     table_str += '+' + '-' * total_width + '+\n'
     table_str += f"|{'排名'.center(rank_width)}|{'User'.center(user_width)}|{'Score'.center(score_width)}|\n"
     table_str += '+' + '-' * rank_width + '+' + '-' * user_width + '+' + '-' * score_width + '+\n'
@@ -217,9 +195,8 @@ def get_rank(current_user_id,firebase_url):
     if sorted_scores:
         i = 1
         for user, score in sorted_scores:
-            # 標記當前使用者
             if user == current_user_id:
-                user_display = f'Me'
+                user_display = f'Ｍe'
             else:
                 user_display = user[:5]
 
@@ -230,7 +207,6 @@ def get_rank(current_user_id,firebase_url):
         table_str += '|' + '目前無人上榜'.center(total_width) + '|\n'
         table_str += '+' + '-' * total_width + '+\n'
     return table_str
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

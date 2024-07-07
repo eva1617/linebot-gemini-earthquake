@@ -222,7 +222,7 @@ def get_rank(current_user_id,firebase_url):
         for user, score in sorted_scores:
             # 標記當前使用者
             if user == current_user_id:
-                user_display = f'Your ID'
+                user_display = f'Me'
             else:
                 user_display = user[:5]
 

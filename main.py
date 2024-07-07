@@ -135,23 +135,56 @@ def generate_examples():
 
 def analyze_response(text, is_scam, user_response):
     if user_response == is_scam:
+        # 如果用户回答正确
         if is_scam:
             prompt = (
                 f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "請解釋這條訊息是如何詐騙的，並提供相應的應對策略。"
+                "請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
+                "1. 這條訊息中的可疑元素\n"
+                "2. 為什麼這些元素是可疑的\n"
+                "3. 如何識別類似的詐騙訊息\n"
+                "4. 面對這種訊息時應該採取什麼行動\n"
+                "請以教育性和提醒性的語氣回答，幫助人們提高警惕。"
+                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
             )
         else:
             prompt = (
-                f"以下是一條真實且正確的訊息:\n\n{text}\n\n"
-                "請分析這條訊息，並提供詳細的解釋，說明這條訊息是真實且正確的，"
-                "包括內容的合理性、可信度來源等。"
+                f"以下是一個真實且正確的訊息:\n\n{text}\n\n"
+                "請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
+                "1. 這條訊息中的真實元素\n"
+                "2. 為什麼這些元素是真實的\n"
+                "3. 如何識別類似的真實訊息\n"
+                "4. 面對這種訊息時應該採取什麼行動\n"
+                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
+                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
             )
-
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
-        return response.text.strip()
     else:
-        return "無法分析，請提供正確的回答"
+        # 如果用户回答错误
+        if is_scam:
+            prompt = (
+                f"以下是一個詐騙訊息:\n\n{text}\n\n"
+                "用教育性和提醒性的語氣，指出這是詐騙訊息。請提供詳細的辨別建議。包括以下幾點：\n"
+                "1. 這條訊息中的可疑元素\n"
+                "2. 為什麼這些元素是可疑的\n"
+                "3. 如何識別類似的詐騙訊息\n"
+                "4. 面對這種訊息時應該採取什麼行動\n"
+                "請以教育性和提醒性的語氣回答，幫助人們提高警惕。"
+                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
+            )
+        else:
+            prompt = (
+                f"以下是一個真實且正確的訊息:\n\n{text}\n\n"
+                "用教育性和提醒性的語氣，指出這是真實且正確的訊息。請提供詳細的辨別建議。包括以下幾點：\n"
+                "1. 這條訊息中的真實元素\n"
+                "2. 為什麼這些元素是真實的\n"
+                "3. 如何識別類似的真實訊息\n"
+                "4. 面對這種訊息時應該採取什麼行動\n"
+                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
+                "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
+            )
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(prompt)
+    return response.text.strip()
 
 def get_sorted_scores(firebase_url, path):
     fdb = firebase.FirebaseApplication(firebase_url, None)

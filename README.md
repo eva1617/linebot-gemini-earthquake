@@ -38,8 +38,8 @@ SITCON Hackathon 2024 成果發表
   - 程式到後面突然崩潰，加上時間不太夠，十分緊急。
 
 ### 成果展示
-![image]([result (1).jpg](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(1).jpg))
-![image]([result (1).jpg](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(2).jpg))
-![image]([result (1).jpg](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(3).jpg))
-![image]([result (1).jpg](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(4).jpg))
+![image](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(1).jpg)
+![image](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(2).jpg)
+![image](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(3).jpg)
+![image](https://github.com/eva1617/linebot-gemini-earthquake/blob/main/result%20(4).jpg)
 

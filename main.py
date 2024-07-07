@@ -98,6 +98,8 @@ async def handle_callback(request: Request):
                     reply_msg = f"你好棒！你的當前分數是：{user_score}分"
                 else:
                     user_score -= 50
+                    if user_score < 50:
+                        user_score = 0
                     fdb.put_async(user_score_path, None, user_score)
                     advice = analyze_response(scam_message if is_scam else correct_message, is_scam, user_response)
                     reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
@@ -106,7 +108,7 @@ async def handle_callback(request: Request):
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         elif event.message.text == "排行榜":
-            reply_msg=get_rank(user_id,firebase_url)
+            reply_msg = get_rank(user_id, firebase_url)
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         else:
             reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
@@ -150,38 +152,30 @@ def analyze_response(text, is_scam, user_response):
         return response.text.strip()
     else:
         return "無法分析，請提供正確的回答"
-def get_sorted_scores(firebase_url,path):
 
+def get_sorted_scores(firebase_url, path):
     fdb = firebase.FirebaseApplication(firebase_url, None)
-    # 從 Firebase 獲取 score 節點下的所有資料
     scores = fdb.get(path, None)
     
     if scores:
-        # 將資料轉換成 (user, score) 的列表
         score_list = [(user, score) for user, score in scores.items()]
-        # 按照分數進行排序，從高到低
         sorted_score_list = sorted(score_list, key=lambda x: x[1], reverse=True)
         return sorted_score_list
     else:
         return []
 
-
-def get_rank(current_user_id,firebase_url):
-
-    # 設定表格的欄位寬度
+def get_rank(current_user_id, firebase_url):
     rank_width = 7
     user_width = 14
     score_width = 11
-    total_width = rank_width + user_width + score_width + 4  # 包括分隔符號
+    total_width = rank_width + user_width + score_width + 4
 
-    sorted_scores = get_sorted_scores(firebase_url,'scores/')
+    sorted_scores = get_sorted_scores(firebase_url, 'scores/')
 
-    # 初始化表格字串
     table_str = ''
 
-    # 表格頂部邊界
     table_str += '+' + '-' * total_width + '+\n'
-    table_str += '|' + "排行榜".center(total_width-3) + '|\n'
+    table_str += '|' + "排行榜".center(total_width - 3) + '|\n'
     table_str += '+' + '-' * total_width + '+\n'
     table_str += f"|{'排名'.center(rank_width)}|{'User'.center(user_width)}|{'Score'.center(score_width)}|\n"
     table_str += '+' + '-' * rank_width + '+' + '-' * user_width + '+' + '-' * score_width + '+\n'
@@ -189,7 +183,6 @@ def get_rank(current_user_id,firebase_url):
     if sorted_scores:
         i = 1
         for user, score in sorted_scores:
-            # 標記當前使用者
             if user == current_user_id:
                 user_display = f'*{user[:user_width]}*'
             else:

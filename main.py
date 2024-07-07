@@ -34,14 +34,14 @@ firebase_url = os.getenv('FIREBASE_URL')
 gemini_key = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=gemini_key)
 
-scam_templates = [
-    "【國泰世華】您的銀行賬戶顯示異常，請立即登入綁定用戶資料，否則賬戶將凍結使用 www.cathay-bk.com",
-    "我朋友參加攝影比賽麻煩幫忙投票 http://www.yahoonikk.info/page/vote.pgp?pid=51",
-    "登入FB就投票成功了我手機當機 line用不了 想請你幫忙安全認證 幫我收個認證簡訊 謝謝 你LINE的登陸認證密碼記得嗎 認證要用到 確認是本人幫忙認證",
-    "您的LINE已違規使用，將在24小時內註銷，請使用谷歌瀏覽器登入電腦網站並掃碼驗證解除違規 www.line-wbe.icu",
-    "【台灣自來水公司】貴戶本期水費已逾期，總計新台幣395元整，務請於6月16日前處理繳費，詳情繳費：https://bit.ly/4cnMNtE 若再超過上述日期，將終止供水",
-    "萬聖節快樂🎃 活動免費貼圖無限量下載 https://lineeshop.com",
-    "【台灣電力股份有限公司】貴戶本期電費已逾期，總計新台幣1058元整，務請於6月14日前處理繳費，詳情繳費：(網址)，若再超過上述日期，將停止收費"
+true_templates = [
+    "Gap夏季盛典⭐全面4折起⭐上班穿搭從容通勤，下班換上神短褲🩳到LINE查詢會員點數抵消費 https://maac.io/20nHK",
+    "【中華電信網路門市優惠通知】3月起精彩運動賽事BWF全英公開賽、MLB等即將開打！Hami Video影視雙享包含超過100個頻道(運動、新聞、生活等)+萬部電影、戲劇，每月僅$188起，最高再贈8GB/月上網量！追劇好康雙享不錯過，立即了解→ https://cht.tw/x/5qud8",
+    "【momo年末應援】有錢快領100元購物金！全館商品現折$100，提醒購物金效期有限，手刀搶購 https://momo.dm/uVbyf3",
+    "警政署提醒您，詐團盜用名人照片投放投資廣告吸引加LINE群組，群組成員多為詐團暗樁，切勿輕易相信，詳見：165.npa.gov.tw。",
+    "9/14起中友購物節全館滿仟贈點！獨享會員禮、15大指定銀行刷卡禮、扣10點抽百萬經典豪車！ https://reurl.cc/jvq99D",
+    "【恭喜您獲得加碼資格！】感謝您使用台新信用卡，請於收到本簡訊3天內首登Richart Life APP tsbk.tw/3z7vxy/ 點擊「我的」>「輸入推薦碼」輸入「CARD30」即贈限量刷卡金30元！謹慎理財信用至上循環利率6.75%-15%",
+    "【跨年LINE POINTS一把抓】貼圖、美食優惠券，完成任務讓你點數領不完，都在台新LINE https://tsbk.tw/5fnvc9"
 ]
 
 @app.get("/health")
@@ -72,9 +72,9 @@ async def handle_callback(request: Request):
             scam_example, correct_example = generate_examples()
             messages = [{'role': 'bot', 'parts': [scam_example, correct_example]}]
             fdb.put_async(f'chat/{user_id}', None, messages)
-            reply_msg = f"{scam_example}\n\n請判斷這是否為詐騙訊息"
+            reply_msg = f"{correct_example}\n\n請判斷這是否為真實訊息"
             confirm_template = ConfirmTemplate(
-                text='請判斷是否為詐騙訊息。',
+                text='請判斷是否為真實訊息。',
                 actions=[
                     MessageAction(label='是', text='是'),
                     MessageAction(label='否', text='否')
@@ -89,10 +89,10 @@ async def handle_callback(request: Request):
             chatgpt = fdb.get(f'chat/{user_id}', None)
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message, correct_message = chatgpt[-1]['parts']
-                is_scam = scam_message is not None
+                is_true = correct_message is not None
                 user_response = event.message.text == '是'
 
-                if user_response == is_scam:
+                if user_response == is_true:
                     user_score += 50
                     fdb.put_async(user_score_path, None, user_score)
                     reply_msg = f"你好棒！你的當前分數是：{user_score}分"
@@ -101,11 +101,11 @@ async def handle_callback(request: Request):
                     if user_score < 50:
                         user_score = 0
                     fdb.put_async(user_score_path, None, user_score)
-                    if is_scam:
-                        reply_msg = f"這是詐騙訊息。請點選解析了解更多。"
+                    if is_true:
+                        reply_msg = f"這是真實訊息。請點選解析了解更多。"
                     else:
-                        advice = analyze_response(correct_message, is_scam, user_response)
-                        reply_msg = f"這是正確訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+                        advice = analyze_response(correct_message, is_true, user_response)
+                        reply_msg = f"這是詐騙訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
@@ -114,51 +114,52 @@ async def handle_callback(request: Request):
             chatgpt = fdb.get(f'chat/{user_id}', None)
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
                 scam_message, correct_message = chatgpt[-1]['parts']
-                is_scam = scam_message is not None
-                advice = analyze_response(scam_message if is_scam else correct_message, is_scam, True)
+                is_true = correct_message is not None
+                advice = analyze_response(correct_message if is_true else scam_message, is_true, True)
                 reply_msg = f"分析如下:\n\n{advice}"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
             else:
-                reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
+                reply_msg = '請先回答「是」或「否」來判斷真實訊息，再查看解析。'
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         elif event.message.text == "排行榜":
             reply_msg = get_rank(user_id, firebase_url)
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         else:
-            reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
+            reply_msg = '請先回答「是」或「否」來判斷真實訊息，再查看解析。'
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
 
     return 'OK'
 
 def generate_examples():
-    scam_template = random.choice(scam_templates)
-    prompt_scam = (
-        f"以下是一個詐騙訊息範例:\n\n{scam_template}\n\n"
-        "請根據這個範例生成一個新的、類似的詐騙訊息。保持相似的結構和風格，"
+    true_template = random.choice(true_templates)
+    prompt_true = (
+        f"以下是一個真實訊息範例:\n\n{true_template}\n\n"
+        "請根據這個範例生成一個新的、類似的真實訊息。保持相似的結構和風格，"
         "但改變具體內容。請確保新生成的訊息具有教育性質，可以用於提高人們對詐騙的警惕性。"
-        "只需要生成詐騙訊息本身，不要添加任何額外的說明或指示。"
+        "只需要生成真實訊息本身，不要添加任何額外的說明或指示。"
     )
-    prompt_correct = (
-        f"請生成一個真實且正確的訊息範例，其風格和結構類似於以下的詐騙訊息範例，但內容是真實且正確的:\n\n{scam_template}"
+    prompt_scam = (
+        f"請生成一個詐騙訊息範例，其風格和結構類似於以下的真實訊息範例，但內容是詐騙的:\n\n{true_template}"
     )
 
     model = genai.GenerativeModel('gemini-pro')
+    true_response = model.generate_content(prompt_true)
     scam_response = model.generate_content(prompt_scam)
-    correct_response = model.generate_content(prompt_correct)
-    return scam_response.text.strip(), correct_response.text.strip()
+    return scam_response.text.strip(), true_response.text.strip()
 
-def analyze_response(text, is_scam, user_response):
-    if user_response == is_scam:
-        if is_scam:
+def analyze_response(text, is_true, user_response):
+    if user_response == is_true:
+        if is_true:
             prompt = (
-                f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "請解釋這條訊息是如何詐騙的，並提供相應的應對策略。"
+                f"以下是一條訊息:\n\n{text}\n\n"
+                "請分析這條訊息，並提供詳細的解釋，說明這條訊息是真實且正確的，"
+                "包括內容的合理性、可信度來源等。"
             )
         else:
             prompt = (
-                f"以下是一條真實且正確的訊息:\n\n{text}\n\n"
-                "請分析這條訊息，並提供詳細的解釋，說明這條訊息是真實且正確的，"
-                "包括內容的合理性、可信度來源等。"
+                f"以下是一條訊息:\n\n{text}\n\n"
+                "請分析這條訊息，並提供詳細的解釋，說明這條訊息為什麼可能是詐騙，"
+                "包括可疑的內容、語氣、格式等。"
             )
 
         model = genai.GenerativeModel('gemini-pro')

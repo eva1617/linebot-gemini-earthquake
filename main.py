@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 import logging
 import os
-import re
 import sys
 from datetime import datetime
 from dotenv import load_dotenv
@@ -17,7 +16,6 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 import uvicorn
-import requests
 import google.generativeai as genai
 from firebase import firebase
 import random
@@ -93,28 +91,46 @@ async def handle_callback(request: Request):
 
         if text == "出題":
             scam_example, correct_example = generate_examples()
-            messages = [{'role': 'bot', 'parts': [scam_example, correct_example]}]
+            is_scam = random.choice([True, False])
+            if is_scam:
+                message = scam_example
+            else:
+                message = correct_example
+            messages = [{'role': 'bot', 'parts': [message], 'is_scam': is_scam}]
             fdb.put_async(user_chat_path, None, messages)
-            reply_msg = f"訊息:\n\n{scam_example}\n\n請判斷這是否為詐騙訊息（請回覆'是'或'否'）"
+            reply_msg = f"{message}\n\n請判斷這是否為詐騙訊息（請回覆'是'或'否')❗️❗️"
         elif text == "分數":
-            reply_msg = f"你的當前分數是：{user_score}分"
+            reply_msg = f"你的當前分數是：{user_score}分 👍"
+        elif text == "解析":
+            if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
+                message = chatgpt[-1]['parts'][0]
+                is_scam = chatgpt[-1]['is_scam']
+                advice = analyze_response(message, is_scam, is_scam)
+                reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。❗️\n如下:\n\n{advice}"
+            else:
+                reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
         elif text in ["是", "否"]:
             if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
-                scam_message, correct_message = chatgpt[-1]['parts']
-                is_scam = scam_message is not None
+                message = chatgpt[-1]['parts'][0]
+                is_scam = chatgpt[-1]['is_scam']
                 user_response = text == "是"
                 
                 if user_response == is_scam:
                     user_score += 50
                     fdb.put_async(user_score_path, None, user_score)
-                    reply_msg = f"你好棒！你的當前分數是：{user_score}分"
+                    reply_msg = f"你好棒！🥳 你的當前分數是：{user_score}分❗️"
                 else:
-                    user_score -= 50
-                    fdb.put_async(user_score_path, None, user_score)
-                    advice = analyze_response(scam_message if is_scam else correct_message, is_scam, user_response)
-                    reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+                    if user_score < 50:
+                        reply_msg = "您目前分數為0分！請加油！🥺"
+                    else:
+                        user_score -= 50
+                        fdb.put_async(user_score_path, None, user_score)
+                        advice = analyze_response(message, is_scam, user_response)
+                        reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
+        else:
+            reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「是」或「否」來判斷上一個生成的範例。'
 
         await line_bot_api.reply_message(
             ReplyMessageRequest(
@@ -163,7 +179,7 @@ def analyze_response(text, is_scam, user_response):
                 "2. 為什麼這些元素是真實的\n"
                 "3. 如何識別類似的真實訊息\n"
                 "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
+                "請以教育性和提醒性的語氣回答，幫助人們提高對真實訊息的識別能力。"
                 "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
             )
     else:
@@ -171,7 +187,7 @@ def analyze_response(text, is_scam, user_response):
         if is_scam:
             prompt = (
                 f"以下是一個詐騙訊息:\n\n{text}\n\n"
-                "用教育性和提醒性的語氣，指出這是詐騙訊息。請提供詳細的辨別建議。包括以下幾點：\n"
+                "用戶認為這不是詐騙訊息。請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
                 "1. 這條訊息中的可疑元素\n"
                 "2. 為什麼這些元素是可疑的\n"
                 "3. 如何識別類似的詐騙訊息\n"
@@ -182,17 +198,19 @@ def analyze_response(text, is_scam, user_response):
         else:
             prompt = (
                 f"以下是一個真實且正確的訊息:\n\n{text}\n\n"
-                "用教育性和提醒性的語氣，指出這是真實且正確的訊息。請提供詳細的辨別建議。包括以下幾點：\n"
+                "用戶認為這是詐騙訊息。請分析這條訊息，並提供詳細的辨別建議。包括以下幾點：\n"
                 "1. 這條訊息中的真實元素\n"
                 "2. 為什麼這些元素是真實的\n"
                 "3. 如何識別類似的真實訊息\n"
                 "4. 面對這種訊息時應該採取什麼行動\n"
-                "請以教育性和提醒性的語氣回答，幫助人們提高辨別真實訊息的能力。"
+                "請以教育性和提醒性的語氣回答，幫助人們提高對真實訊息的識別能力。"
                 "不要使用任何粗體或任何特殊格式，例如＊或是-，不要使用markdown語法，只需使用純文本。不要使用破折號，而是使用數字列表。"
             )
+
     model = genai.GenerativeModel('gemini-pro')
     response = model.generate_content(prompt)
     return response.text.strip()
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv('PORT', 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

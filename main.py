@@ -34,14 +34,17 @@ firebase_url = os.getenv('FIREBASE_URL')
 gemini_key = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=gemini_key)
 
-fake_templates = [
+true_templates = [
     "【國泰世華】您的銀行賬戶顯示異常，請立即登入綁定用戶資料，否則賬戶將凍結使用 www.cathay-bk.com",
-    "我朋友參加攝影比賽麻煩幫忙投票 http://www.yahoonikk.info/page/vote.pgp?pid=51",
-    "登入FB就投票成功了我手機當機 line用不了 想請你幫忙安全認證 幫我收個認證簡訊 謝謝 你LINE的登陸認證密碼記得嗎 認證要用到 確認是本人幫忙認證",
-    "您的LINE已違規使用，將在24小時內註銷，請使用谷歌瀏覽器登入電腦網站並掃碼驗證解除違規 www.line-wbe.icu",
     "【台灣自來水公司】貴戶本期水費已逾期，總計新台幣395元整，務請於6月16日前處理繳費，詳情繳費：https://bit.ly/4cnMNtE 若再超過上述日期，將終止供水",
     "萬聖節快樂🎃 活動免費貼圖無限量下載 https://lineeshop.com",
     "【台灣電力股份有限公司】貴戶本期電費已逾期，總計新台幣1058元整，務請於6月14日前處理繳費，詳情繳費：(網址)，若再超過上述日期，將停止收費"
+]
+
+fake_templates = [
+    "我朋友參加攝影比賽麻煩幫忙投票 http://www.yahoonikk.info/page/vote.pgp?pid=51",
+    "登入FB就投票成功了我手機當機 line用不了 想請你幫忙安全認證 幫我收個認證簡訊 謝謝 你LINE的登陸認證密碼記得嗎 認證要用到 確認是本人幫忙認證",
+    "您的LINE已違規使用，將在24小時內註銷，請使用谷歌瀏覽器登入電腦網站並掃碼驗證解除違規 www.line-wbe.icu"
 ]
 
 @app.get("/health")
@@ -131,14 +134,9 @@ async def handle_callback(request: Request):
     return 'OK'
 
 def generate_examples():
-    fake_template = random.choice(fake_templates)
-    prompt_fake = (
-        f"請生成一個詐騙訊息範例，其風格和結構類似於以下的真實訊息範例，但內容是詐騙的:\n\n{fake_template}"
-    )
-
-    model = genai.GenerativeModel('gemini-pro')
-    scam_response = model.generate_content(prompt_fake)
-    return scam_response.text.strip(), None
+    combined_templates = true_templates + fake_templates
+    example = random.choice(combined_templates)
+    return example, None
 
 def analyze_response(text, is_true, user_response):
     if user_response == is_true:

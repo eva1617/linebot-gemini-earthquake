@@ -115,8 +115,6 @@ async def handle_callback(request: Request):
                     reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
-        else:
-            reply_msg = '未能識別的指令，請輸入「出題」生成一個詐騙訊息範例，或輸入「是」或「否」來判斷上一個生成的範例。'
 
         await line_bot_api.reply_message(
             ReplyMessageRequest(

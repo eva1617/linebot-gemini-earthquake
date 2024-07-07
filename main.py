@@ -101,11 +101,25 @@ async def handle_callback(request: Request):
                     if user_score < 50:
                         user_score = 0
                     fdb.put_async(user_score_path, None, user_score)
-                    advice = analyze_response(scam_message if is_scam else correct_message, is_scam, user_response)
-                    reply_msg = f"這是{'詐騙' if is_scam else '正確'}訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
+                    if is_scam:
+                        reply_msg = f"這是詐騙訊息。請點選解析了解更多。"
+                    else:
+                        advice = analyze_response(correct_message, is_scam, user_response)
+                        reply_msg = f"這是正確訊息。分析如下:\n\n{advice}\n\n你的當前分數是：{user_score}分"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
             else:
                 reply_msg = '目前沒有可供解析的訊息，請先輸入「出題」生成一個範例。'
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+        elif event.message.text == "解析":
+            chatgpt = fdb.get(f'chat/{user_id}', None)
+            if chatgpt and len(chatgpt) > 0 and chatgpt[-1]['role'] == 'bot':
+                scam_message, correct_message = chatgpt[-1]['parts']
+                is_scam = scam_message is not None
+                advice = analyze_response(scam_message if is_scam else correct_message, is_scam, True)
+                reply_msg = f"分析如下:\n\n{advice}"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+            else:
+                reply_msg = '請先回答「是」或「否」來判斷詐騙訊息，再查看解析。'
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         elif event.message.text == "排行榜":
             reply_msg = get_rank(user_id, firebase_url)
